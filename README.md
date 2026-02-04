@@ -96,8 +96,9 @@ AI algorithm stats:
 ## Apple Format Help
 
 ```
-Era	                                      Image	          Video
-2015–2017	                              .jpg	          .mov
+          Era                             Image	          Video
+--------------------------------------------------------------------------
+       2015–2017	                      .jpg	          .mov
 2017–present (High Efficiency)	          .heic	          .mov
 2017–present (Most Compatible)	          .jpg	          .mp4
 ```
