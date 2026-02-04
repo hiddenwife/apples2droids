@@ -6,7 +6,7 @@
 ## About
 When downloading Apple photos from ICloud, all Live Photos (images that move for ~3seconds) are downloaded as one static image and one ~3s video. If you have thousands of photos, this can be unbelievably annoying.
 
-If you're migrating away from Apple, you may want to access your Live Photos, but are unable to.
+If you're migrating away from Apple and want to access your Live Photos, then this repo is perfect for you!
 
 That's why I created **apples2droid**, which comverts Live Photos into one single .jpg, which is compatible with Google's Motion Photo and other Android Motion Photos. AND when you save the new .jgp image elsewhere, it will only be ONE file, not split into two files (static + video) again.
 
@@ -58,13 +58,19 @@ chmod +x apples2droids.py
 
 
 ## Overview and Usage
+
+### GUI
 The code launches a lightweight front-end `tkinter` GUI to choose the input and output folders, and to execute the code.
-**NOTE**: Make sure your output folder is empty, as it will overwrite files of the same.
+
+**NOTE**: Make sure your output folder is empty, as it will overwrite files of the same name.
+
 **NOTE**: The input file is read-only so your images won't be edited or tampered with. BUT PLEASE MAKE SURE YOU ALWAYS HAVE A BACKUP. IF YOUR LAPTOP DIES OR BLUESCREENS AT THE EXACT POINT THE CODE IS READING THE IMAGE, IT COULD CORRUPT IT OR SIMILAR (not that this will likely happen, but always be safe, especially if they're important photos).
 
-The metadata of the new images are copied directly from their respective static image metadata. The video metadata is disgarded.
+### Metadata and other images
 
-The code also copies all other non-Live images and videos unchanged.
+The metadata of the new images are copied directly from their respective static image metadata (the .HEIC or .jpg). The metadata from the video half of the Live Photo is disgarded.
+
+All other non-Live images and videos unchanged with metadata preserved, and are added to the output folder.
 
 ### AI algorithm 1
 
@@ -72,14 +78,14 @@ There is a `Tensorflow` powered machine learning algorithm which to re-orients t
 
 There is also an equivalent and identical `Pytorch` algorithm which is used as backup if the `Tensorflow` algorithm fails (eg Tensorflow isn't installed).
 
-I have left the algorithm codes here if you want to train them on your own photos. This code automatically changes the orientation of the images for training, so all you need to do it provide the PATH to the images folder. 
- - I have also left a code that you should run on your images folder to reduce the image size so the algorithm can train on these smaller images, otherwise it's too computationally expensive.
+- I have left the algorithm codes here if you want to train them on your own photos. This code automatically changes the orientation of the images for training, so all you need to do it provide the PATH to the images folder. 
+- I have also left a code that you should run on your images folder to reduce the image size so the algorithm can train on these smaller images, otherwise it's too computationally expensive.
 
 AI algorithm stats:
  - accuracy: 0.9996
  - loss: 9.9206e-04
  - val_accuracy: 1.0000
- - val_loss: 0.0012
+ - val_loss: 6.4953e-04
 
 
 ### AI algorithm 2
@@ -89,10 +95,12 @@ AI algorithm stats:
 
 ## Apple Format Help
 
-**Era**	                                **Image**	    **Video**
+```
+Era	                                      Image	          Video
 2015–2017	                              .jpg	          .mov
 2017–present (High Efficiency)	          .heic	          .mov
 2017–present (Most Compatible)	          .jpg	          .mp4
+```
 
 - These are the only format-types that are considered in this program. `.heic + .mp4` is never valid. 
 - Photos before Sept 2015 will not be considered (Live Photos introduced Sept 2015), and will simply be added to the output folder __unchanged__.
