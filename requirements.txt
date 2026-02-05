@@ -1,0 +1,7 @@
+Pillow
+pillow-heif
+numpy
+psutil
+tensorflow
+torch
+torchvision
