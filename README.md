@@ -20,11 +20,11 @@ You need Python. Create a virtual environment, then run:
 pip install -r requirements_python.txt
 ```
 
-**NOTE**: You need **Exiftool** downloaded, see here for all operating systems: [Website](https://exiftool.org/).
+**NOTE**: ExifTool and ffmpeg are required and must be available in PATH. Download ExifTool here: [Website](https://exiftool.org/).
 
 ### Windows:
 
-Download Exiftool directly: [Windows 64](https://sourceforge.net/projects/exiftool/files/exiftool-13.48_64.zip/download), [Windows 32](https://sourceforge.net/projects/exiftool/files/exiftool-13.48_32.zip/download)
+Download ExifTool directly: [Windows 64](https://sourceforge.net/projects/exiftool/files/exiftool-13.48_64.zip/download), [Windows 32](https://sourceforge.net/projects/exiftool/files/exiftool-13.48_32.zip/download)
 
 
 ```bash
@@ -39,7 +39,7 @@ python apples2droids.py
 sudo apt install exiftool
 ```
 
-Exiftool for **Other Linux distros**: [Website](https://exiftool.org/)
+ExifTool for **Other Linux distros**: [Website](https://exiftool.org/)
 
 ```bash
 chmod +x apples2droids.py
@@ -48,7 +48,7 @@ chmod +x apples2droids.py
 
 ### MacOS:
 
-Download Exiftools here: [Website](https://exiftool.org/)
+Download ExifTool here: [Website](https://exiftool.org/)
 
 ```bash
 chmod +x apples2droids.py
@@ -89,7 +89,7 @@ Apple Live Photos rely heavily on EXIF orientation metadata rather than storing 
 As a result, metadata-based orientation handling becomes unreliable once files are converted into Motion Photos.
 
 
-### The solution
+#### The solution
 
 Instead of trusting metadata, apples2droids uses a **pixel-based approach**:
 
@@ -129,10 +129,39 @@ This is unnecessary for standard iCloud exports and will significantly slow down
 ```
           Era                             Image	          Video
 --------------------------------------------------------------------------
-       2015–2017	                      .jpg	          .mov
+       2015–2017	                       .jpg	          .mov
 2017–present (High Efficiency)	        .heic	          .mov
 2017–present (Most Compatible)	        .jpg	          .mp4
 ```
 
 - These are the only format-types that are considered in this program. `.heic + .mp4` is never valid. 
 - Photos before Sept 2015 will not be considered (Live Photos introduced Sept 2015), and will simply be added to the output folder __unchanged__.
+
+
+## Troubleshooting
+
+- If the GUI stalls during processing, check system memory and CPU usage (`htop`, `free -m`).  
+  You may need to close other applications or reduce concurrency via `PER_WORKER_MEM_MB`.
+- If AI inference is not running, ensure at least one model file exists:
+  `relative_rotation_alignment_model.keras` (TensorFlow) or
+  `relative_rotation_alignment_model_pt.pth` (PyTorch).
+
+
+### Low-memory systems
+
+If your machine has limited RAM (e.g. <8 GB), you can reduce concurrency manually:
+
+```bash
+export PER_WORKER_MEM_MB=900
+./apples2droids.py
+```
+
+## Performance & Stability Notes
+
+- The app automatically limits concurrency based on available system memory to avoid freezes.
+- Motion Photos are written atomically (`.jpg.part → .jpg`) to prevent corrupted outputs on crashes.
+- ffmpeg is run with conservative threading to reduce CPU and RAM spikes.
+- Orientation is handled using a pixel-based correction flow, then EXIF Orientation is forced to `1`
+  to ensure correct display across all devices.
+
+
