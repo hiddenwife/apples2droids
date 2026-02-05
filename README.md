@@ -17,7 +17,7 @@ The resulting `.jpg` remains a Motion Photo, but its motion component is only ac
 You need Python. Create a virtual environment, then run:
 
 ```bash
-pip install -r requirements_python.txt
+pip install -r requirements.txt
 ```
 
 **NOTE**: ExifTool and ffmpeg are required and must be available in PATH. Download ExifTool here: [Website](https://exiftool.org/).
