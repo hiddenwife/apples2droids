@@ -2,9 +2,10 @@
 
 
 ## About
-When downloading photos from iCloud, all Live Photos (images that move for ~3 seconds) are exported as two separate files: one static image and one short video. If you have thousands of photos, this quickly becomes very annoying.
 
 If you're migrating away from Apple and want to keep your Live Photos *alive*, this repo is for you.
+
+When downloading photos from iCloud, all Live Photos (images that move for ~3 seconds) are exported as two separate files: one static image and one short video. If you have thousands of photos, this quickly becomes very annoying.
 
 **apples2droids** converts Apple Live Photos into a single Motion Photo `.jpg` that is compatible with Google Motion Photos and other Android devices. The output is **one file per photo**, not a split image + video pair.
 
@@ -20,7 +21,9 @@ You need Python. Create a virtual environment, then run:
 pip install -r requirements.txt
 ```
 
-**NOTE**: ExifTool and ffmpeg are required and must be available in PATH. Download ExifTool here: [Website](https://exiftool.org/).
+**NOTE**: ExifTool and ffmpeg are required and must be available in PATH. 
+- Download ExifTool here: [Website](https://exiftool.org/).
+- Download ffmpeg here: [Website](https://www.ffmpeg.org/download.html)
 
 ### Windows:
 
@@ -39,16 +42,12 @@ python apples2droids.py
 sudo apt install exiftool
 ```
 
-ExifTool for **Other Linux distros**: [Website](https://exiftool.org/)
-
 ```bash
 chmod +x apples2droids.py
 ./apples2droids.py
 ```
 
 ### MacOS:
-
-Download ExifTool here: [Website](https://exiftool.org/)
 
 ```bash
 chmod +x apples2droids.py

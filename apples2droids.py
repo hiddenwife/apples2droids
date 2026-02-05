@@ -69,7 +69,7 @@ except ImportError:
     print("TensorFlow not found.")
 
 # ================= CONSTANTS =================
-MODEL_PATH_TF = "relative_rotation_alignment_model.keras"
+MODEL_PATH_TF = "ML_algorithm_1/relative_rotation_alignment_model.keras"
 IMG_SIZE = (160, 160)
 DEFAULT_PER_WORKER_MEM_MB = 700
 MIN_FREE_MEM_MB = 1000
