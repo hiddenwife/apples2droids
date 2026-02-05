@@ -1,21 +1,20 @@
-# apples2droids
-
 ![logo](docs/logo.jpeg "logo")
 
 
 ## About
-When downloading Apple photos from ICloud, all Live Photos (images that move for ~3seconds) are downloaded as one static image and one ~3s video. If you have thousands of photos, this can be unbelievably annoying.
+When downloading photos from iCloud, all Live Photos (images that move for ~3 seconds) are exported as two separate files: one static image and one short video. If you have thousands of photos, this quickly becomes very annoying.
 
-If you're migrating away from Apple and want to access your Live Photos, then this repo is perfect for you!
+If you're migrating away from Apple and want to keep your Live Photos *alive*, this repo is for you.
 
-That's why I created **apples2droid**, which comverts Live Photos into one single .jpg, which is compatible with Google's Motion Photo and other Android Motion Photos. AND when you save the new .jgp image elsewhere, it will only be ONE file, not split into two files (static + video) again.
+**apples2droids** converts Apple Live Photos into a single Motion Photo `.jpg` that is compatible with Google Motion Photos and other Android devices. The output is **one file per photo**, not a split image + video pair.
 
-The new .jpg image will remain a Motion Photo, but will only be accessible as a Motion Photo if on an compatible device (eg android device). So saving the image elsewhere won't strip its Motion feature. 
+The resulting `.jpg` remains a Motion Photo, but its motion component is only accessible on compatible devices (e.g. Android). Copying or saving the file elsewhere will **not** strip its motion data.
 
-**NOTE**: This code assumes that the Live Photos are split into an image file and a video file (you can manually set which formats you want considered, see **Format Help** section), with identical names - this is standard from ICloud. If they do not have the same name, eg IMG_0001.HEIC and IMG_0001.MOV, then the code will not consider them. 
+**NOTE**: This tool assumes Live Photos are exported as one image file and one video file with identical names (e.g. `IMG_0001.HEIC` + `IMG_0001.MOV`), which is the standard iCloud export format. If filenames do not match, they will not be paired.
+
 
 ## Quick Start
-You need Python. Make virtual env, then run:
+You need Python. Create a virtual environment, then run:
 
 ```bash
 pip install -r requirements_python.txt
@@ -25,7 +24,7 @@ pip install -r requirements_python.txt
 
 ### Windows:
 
-Download Exiftools here: [Website](https://exiftool.org/), or download directly: [Windows 64](https://sourceforge.net/projects/exiftool/files/exiftool-13.48_64.zip/download), [Windows 32](https://sourceforge.net/projects/exiftool/files/exiftool-13.48_32.zip/download)
+Download Exiftool directly: [Windows 64](https://sourceforge.net/projects/exiftool/files/exiftool-13.48_64.zip/download), [Windows 32](https://sourceforge.net/projects/exiftool/files/exiftool-13.48_32.zip/download)
 
 
 ```bash
@@ -64,33 +63,65 @@ The code launches a lightweight front-end `tkinter` GUI to choose the input and 
 
 **NOTE**: Make sure your output folder is empty, as it will overwrite files of the same name.
 
-**NOTE**: The input file is read-only so your images won't be edited or tampered with. BUT PLEASE MAKE SURE YOU ALWAYS HAVE A BACKUP. IF YOUR LAPTOP DIES OR BLUESCREENS AT THE EXACT POINT THE CODE IS READING THE IMAGE, IT COULD CORRUPT IT OR SIMILAR (not that this will likely happen, but always be safe, especially if they're important photos).
+**NOTE**: The input folder is treated as read-only, so your original files are not intentionally modified.  
+However, **always keep a backup**. In the extremely unlikely event of a system crash during processing, file corruption is still possible.
 
 ### Metadata and other images
 
-The metadata of the new images are copied directly from their respective static image metadata (the .HEIC or .jpg). The metadata from the video half of the Live Photo is disgarded.
+The metadata of the new Motion Photos are copied directly from their respective static image's metadata (the .HEIC or .jpg). The metadata from the video half of the Live Photo is disgarded.
 
-All other non-Live images and videos unchanged with metadata preserved, and are added to the output folder.
+All other non-Live images and videos are left unchanged with their original metadata preserved, and are added to the output folder.
 
-### AI algorithm 1
+### AI algorithm 1 – Orientation correction (Pixel-based)
 
-There is a `Tensorflow` powered machine learning algorithm which to re-orients the images back to their orignal orientation, as doing it manually by looking at metadata was found to be inconistent and inaccurate. They have been trained on thousands of personal images. 
+apples2droids uses a **TensorFlow-powered machine learning model** to correct image orientation. This is necessary because relying on metadata alone was found to be inconsistent and unreliable.
 
-There is also an equivalent and identical `Pytorch` algorithm which is used as backup if the `Tensorflow` algorithm fails (eg Tensorflow isn't installed).
+#### Why inconistent and inaccurate?
+Apple Live Photos rely heavily on EXIF orientation metadata rather than storing images in an upright pixel orientation. When converting Live Photos into Android Motion Photos, this becomes problematic:
 
-- I have left the algorithm codes here if you want to train them on your own photos. This code automatically changes the orientation of the images for training, so all you need to do it provide the PATH to the images folder. 
-- I have also left a code that you should run on your images folder to reduce the image size so the algorithm can train on these smaller images, otherwise it's too computationally expensive.
+- The output file is no longer a standard JPEG (it contains appended video data)
+- Some tools (including ExifTool) may:
+  - apply EXIF orientation to the pixel data
+  - then copy the same orientation metadata again
+  - resulting in **double-rotation** (commonly a 180° flip)
+- Portrait images are especially affected, while landscape images often appear “correct” by coincidence
 
-AI algorithm stats:
- - accuracy: 0.9996
- - loss: 9.9206e-04
- - val_accuracy: 1.0000
- - val_loss: 6.4953e-04
+As a result, metadata-based orientation handling becomes unreliable once files are converted into Motion Photos.
+
+
+### The solution
+
+Instead of trusting metadata, apples2droids uses a **pixel-based approach**:
+
+1. All metadata is copied **except rotation-related tags**
+2. A machine learning model compares:
+   - the original image
+   - the final Motion Photo
+3. If a mismatch is detected:
+   - the **pixels themselves are rotated**
+   - EXIF Orientation is forcibly set to `1` (normal)
+4. The result is a Motion Photo that displays correctly on **all devices**, regardless of how they interpret metadata
+
+
+The model has been trained on thousands of real photos.
+
+An equivalent **PyTorch** implementation is included as a fallback in case TensorFlow is unavailable.
+
+Training scripts are provided if you wish to retrain the model on your own photo library. A preprocessing script is also included to downscale images for efficient training.
+
 
 
 ### AI algorithm 2
 
+This machine learning algorithm scans both the image and the video which are identified as a Live Photo combo, and confirms if the matching is correct. This is primarily for those who believe their file names are inaccurate. For example, unrelated images + videos having the same name.
 
+This can be toggled on/off. By default, this is toggled off.
+
+If you don't believe you have file naming issues, it's recommened to keep this toggled off to speed up the process. 
+
+Keep this toggled on if you do not want any accidental merges of random files. 
+
+This is unnecessary for standard iCloud exports and will significantly slow down processing.
 
 
 ## Apple Format Help
@@ -99,8 +130,8 @@ AI algorithm stats:
           Era                             Image	          Video
 --------------------------------------------------------------------------
        2015–2017	                      .jpg	          .mov
-2017–present (High Efficiency)	          .heic	          .mov
-2017–present (Most Compatible)	          .jpg	          .mp4
+2017–present (High Efficiency)	        .heic	          .mov
+2017–present (Most Compatible)	        .jpg	          .mp4
 ```
 
 - These are the only format-types that are considered in this program. `.heic + .mp4` is never valid. 
