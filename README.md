@@ -118,24 +118,24 @@ This machine learning algorithm scans both the image and the video which are ide
 
 - This can be toggled on/off. By default, this is toggled off.
 - Keep this toggled on if you do not want any accidental merges of random files, and are concerned this could happen.
- - All my personal photos were from standard ICloud export, but this AI detected file naming issues with my photos.
- - Therefore, there is no harm keeping this on even in standard photo downloading cases (the photo naming problems could have arised through using multiple device, or other ways).
+  - All my personal photos were from standard ICloud export, but this AI detected file naming issues with my photos.
+  - Therefore, there is no harm keeping this on even in standard photo downloading cases (the photo naming problems could have arised through using multiple device, or other ways).
 
 #### Training Process
 
 - This algorithm has been trained on 10000 real Live Photos.
- - The video-half of the Live Photo was split into ~7 screenshots, which was then compared against the image-half of the Live Photo.
+  - The video-half of the Live Photo was split into ~7 screenshots, which was then compared against the image-half of the Live Photo.
 - The AI makes a judgement given the analysis of the 7 photos as to if it was correctly identified as a Live Photo duo.
 
 #### Inference process
 
 - If this option is toggled on, the AI scans the static image and 3-5 screenshots of the video. 
- - A percentage judgement of each photo is made, with a final overall judgement.
- - The specific setup is to reduce false-positives as much as possible
+  - A percentage judgement of each photo is made, with a final overall judgement.
+  - The specific setup is to reduce false-positives as much as possible
 - If the AI confirms they're the same, the photos are authorised to be combined and the code will continue to the next Live Photo
 - If the AI flags potential mis-identification, the user has two options depending on what they selected in the GUI:
- - Pass all potential mis-identifications (<70%) to the output folder unchanged automatically, i.e. keep the original video and image.
- - Individually verify each potential mis-identification (40%-70%), and confirm if they should be combined or not (this is done at the end). A embedded viewer pops up with the opportunity to compare the image and video side-by-side.
+  - Pass all potential mis-identifications (<70%) to the output folder unchanged automatically, i.e. keep the original video and image.
+  - Individually verify each potential mis-identification (40%-70%), and confirm if they should be combined or not (this is done at the end). A embedded viewer pops up with the opportunity to compare the image and video side-by-side.
 - **NOTE**: With this enabled, all duos identified with <40% confidence are automatically passed unchanged, as there is a very high likelihood these duos were not originally Live Photos.
 
 
@@ -161,8 +161,8 @@ This machine learning algorithm scans both the image and the video which are ide
 - If the GUI stalls during processing, check system memory and CPU usage (`htop`, `free -m`).  
   You may need to close other applications or reduce concurrency via `PER_WORKER_MEM_MB`.
 - If AI inference is not running, ensure at least one model file exists:
- - `ML_algorithm_1/relative_rotation_alignment_model.keras` (TensorFlow) (100% necessary for correctness)
- - `ML_algorithm_2/live_photo_verifier_model.keras` (TensorFlow) (necessary for verifying image+video)
+  - `ML_algorithm_1/relative_rotation_alignment_model.keras` (TensorFlow) (100% necessary for correctness)
+  - `ML_algorithm_2/live_photo_verifier_model.keras` (TensorFlow) (necessary for verifying image+video)
 
 
 
