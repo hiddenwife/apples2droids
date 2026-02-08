@@ -9,6 +9,8 @@ ROBUST TWO-STAGE APPROACH:
 This respects exiftool's workflow and doesn't try to fight it mid-process.
 """
 
+from ML_algorithm_2.custom_layers import AbsDiff, ReduceMin, ReduceMean
+
 import os
 import shutil
 import subprocess
@@ -17,15 +19,25 @@ import queue
 import time
 import tkinter as tk
 from tkinter import filedialog, scrolledtext, ttk, messagebox
+import tempfile
 from pathlib import Path
 from multiprocessing import cpu_count, freeze_support
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from PIL import Image
+
+# ================= IMAGE HANDLING SETUP =================
+from PIL import Image, ImageOps, ImageTk
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except ImportError:
+    print("WARNING: 'pillow-heif' not installed. AI may fail on HEIC files.")
+    print("Run: pip install pillow-heif")
+
 try:
     import psutil
 except Exception:
     psutil = None
-from PIL import Image
+
 try:
     import torch
     HAS_PT = True
@@ -33,14 +45,6 @@ except Exception:
     HAS_PT = False
 
 model_pt = None
-
-# ================= IMAGE HANDLING SETUP =================
-try:
-    from pillow_heif import register_heif_opener
-    register_heif_opener()
-except ImportError:
-    print("WARNING: 'pillow-heif' not installed. AI may fail on HEIC files.")
-    print("Run: pip install pillow-heif")
 
 # ================= TENSORFLOW & GPU SETUP =================
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
@@ -70,7 +74,10 @@ except ImportError:
 
 # ================= CONSTANTS =================
 MODEL_PATH_TF = "ML_algorithm_1/relative_rotation_alignment_model.keras"
+VERIFIER_MODEL_PATH = "ML_algorithm_2/live_photo_verifier_model.keras"
 IMG_SIZE = (160, 160)
+VERIFIER_IMG_SIZE = (224, 224)
+VERIFIER_SAMPLE_POS = [0.25, 0.5, 0.75]
 DEFAULT_PER_WORKER_MEM_MB = 700
 MIN_FREE_MEM_MB = 1000
 MIN_MEM_FOR_MODEL = 2000
@@ -219,6 +226,9 @@ class InferenceWorker:
                     t.event.set()
 
     def predict(self, ref, check):
+        if self._stop.is_set():
+            # If worker is stopped, return default to avoid hang
+            return 0
         task = type('T', (), {})()
         task.ref = ref
         task.check = check
@@ -281,7 +291,6 @@ def load_model_tf(logger):
             except Exception as e2:
                 logger(f"PyTorch fallback also failed: {e2}")
 
-from PIL import Image, ImageOps
 
 def safe_load_image_with_exif(path):
     """Load image and apply EXIF orientation (for viewing correctness)."""
@@ -325,19 +334,152 @@ def load_model_pt(logger):
         logger(f"Failed to load PyTorch model: {e}")
 
 
+# ================= VERIFIER MODEL (AI ALGO 2) =================
+verifier_model = None
+
+def get_video_duration(path: str):
+    try:
+        out = subprocess.check_output([
+            "ffprobe", "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", str(path)
+        ], stderr=subprocess.DEVNULL)
+        return float(out.decode().strip())
+    except Exception:
+        return None
+
+
+def sample_video_frames(video_path: str, positions, needed_count: int):
+    """Extract frames from video at relative positions (0.0-1.0). Returns list of file paths."""
+    dur = get_video_duration(video_path)
+    if dur is None:
+        return []
+
+    tmp_files = []
+    # If requested positions fewer than needed_count, we'll duplicate later
+    for p in positions:
+        t = max(0.1, min(dur - 0.1, dur * float(p)))
+        tfp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        tfp.close()
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", str(t),
+            "-i", str(video_path),
+            "-frames:v", "1",
+            "-q:v", "2",
+            tfp.name
+        ]
+        try:
+            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            tmp_files.append(tfp.name)
+        except Exception:
+            try:
+                os.unlink(tfp.name)
+            except Exception:
+                pass
+
+    # If we need more frames, duplicate nearest frames until count reached
+    if len(tmp_files) > 0 and len(tmp_files) < needed_count:
+        i = 0
+        while len(tmp_files) < needed_count:
+            tmp_files.append(tmp_files[i % len(tmp_files)])
+            i += 1
+
+    return tmp_files
+
+
+def load_verifier_model(logger):
+    global verifier_model
+    if verifier_model is not None:
+        return
+    try:
+        if not HAS_TF:
+            logger("Verifier: TensorFlow not available, verifier skipped.")
+            return
+        if not os.path.exists(VERIFIER_MODEL_PATH):
+            logger(f"Verifier model '{VERIFIER_MODEL_PATH}' not found. Skipping AI-algo-2.")
+            return
+        logger("Loading verifier model (AI algorithm 2)...")
+        verifier_model = tf.keras.models.load_model(VERIFIER_MODEL_PATH)
+        logger("Verifier model ready.")
+    except Exception as e:
+        logger(f"Failed to load verifier model: {e}")
+
+
+def verify_pair(still_path: str, video_path: str, logger, sample_positions=VERIFIER_SAMPLE_POS):
+    """Return (status, confidence) tuple where:
+    - status: "match" (prob >= 0.70), "uncertain" (0.40 <= prob < 0.70), or "mismatch" (prob < 0.40)
+    - confidence: 0.0-1.0 probability
+    """
+    global verifier_model
+    if verifier_model is None:
+        return ("verifier_unavailable", 0.0)
+
+    try:
+        # Determine model expected frames length
+        try:
+            frames_input_shape = verifier_model.input[1].shape
+            expected_frames = int(frames_input_shape[1]) if frames_input_shape[1] is not None else len(sample_positions)
+        except Exception:
+            expected_frames = len(sample_positions)
+
+        tmp_frames = sample_video_frames(video_path, sample_positions, expected_frames)
+        if not tmp_frames:
+            logger("Verifier: could not sample frames from video; assuming match.")
+            return ("match", 1.0)
+
+        # Load still
+        still = load_img(still_path, target_size=VERIFIER_IMG_SIZE)
+        still = img_to_array(still) / 255.0
+        still = np.expand_dims(still, axis=0)
+
+        frame_imgs = []
+        for f in tmp_frames[:expected_frames]:
+            img = load_img(f, target_size=VERIFIER_IMG_SIZE)
+            img = img_to_array(img) / 255.0
+            frame_imgs.append(img)
+
+        # If we have fewer than expected, duplicate
+        while len(frame_imgs) < expected_frames:
+            frame_imgs.append(frame_imgs[-1])
+
+        frames_arr = np.expand_dims(np.stack(frame_imgs, axis=0), axis=0)
+
+        preds = verifier_model.predict([still, frames_arr], verbose=0)
+        # model outputs a single sigmoid probability per sample
+        prob = float(preds.reshape(-1)[0])
+
+        # cleanup temporary files
+        for f in set(tmp_frames):
+            try:
+                os.unlink(f)
+            except Exception:
+                pass
+
+        # Classify into three tiers
+        if prob >= 0.70:
+            status = "match"
+        elif prob < 0.40:
+            status = "mismatch"
+        else:
+            status = "uncertain"
+
+        return (status, prob)
+    except Exception as e:
+        logger(f"Verifier error: {e} — allowing pair by default")
+        return ("match", 1.0)
+
+
+
 def get_correction_rotation_class(ref_path, check_path):
     """
-    TWO-STAGE APPROACH:
-    Compare the FINAL SAVED file (with all metadata applied) against the original.
-    Both are loaded WITH exif_transpose so we see how they actually display.
-    
     Returns: rotation class (0-3) where:
     - 0 = no change needed
     - 1 = rotate 90° CCW needed
     - 2 = rotate 180° needed  
     - 3 = rotate 270° CCW needed
     """
-    # Load both images WITH EXIF correction (to see how they actually display)
+    # Load both images WITH EXIF correction
     arr_ref = safe_load_image_with_exif(ref_path)
     if arr_ref is None:
         print(f"   [AI Fail] Could not read reference: {os.path.basename(ref_path)}")
@@ -472,7 +614,7 @@ def transcode_or_copy_video(src: Path, dst: Path, logger) -> bool:
     ])
 
 
-def process_live_pair(img_path: Path, vid_path: Path, out_dir: Path, logger):
+def process_live_pair(img_path: Path, vid_path: Path, out_dir: Path, logger, ai2_enabled=False, ai2_auto_pass=True, app=None):
     """
     ROBUST TWO-STAGE PROCESS:
     1. Convert, merge, apply metadata (let exiftool do its thing completely)
@@ -484,6 +626,63 @@ def process_live_pair(img_path: Path, vid_path: Path, out_dir: Path, logger):
     final_path = out_dir / (img_path.stem + ".jpg")
 
     try:
+        # If AI algorithm 2 is enabled, run verifier BEFORE expensive processing.
+        if ai2_enabled:
+            try:
+                logger("   Verifying still/video match (AI-2)...")
+                status, confidence = verify_pair(str(img_path), str(vid_path), logger)
+
+                if status == "verifier_unavailable":
+                    logger("   Verifier model not loaded — skipping AI-2 pre-check.")
+
+                elif status == "mismatch":
+                    # Strong mismatch: ALWAYS skip merge
+                    logger(f"   ⚠ MISMATCH DETECTED (<40%): {img_path.name} + {vid_path.name}")
+                    logger(f"   ⚠ NOT merging these files (strong semantic mismatch)")
+                    tgt_img = out_dir / img_path.name
+                    tgt_vid = out_dir / vid_path.name
+                    if tgt_img.exists(): tgt_img = out_dir / f"{img_path.stem}_{int(time.time())}{img_path.suffix}"
+                    if tgt_vid.exists(): tgt_vid = out_dir / f"{vid_path.stem}_{int(time.time())}{vid_path.suffix}"
+                    try:
+                        shutil.copy2(img_path, tgt_img)
+                        shutil.copy2(vid_path, tgt_vid)
+                        logger(f"   ✓ Files copied unchanged to output.")
+                    except Exception as e:
+                        logger(f"   Copy failed: {e}")
+                    return
+
+                elif status == "uncertain":
+                    # Ambiguity zone: handle based on user setting
+                    logger(f"   ⚠ UNCERTAIN (40-70%): {img_path.name} + {vid_path.name}")
+                    if ai2_auto_pass:
+                        # Auto-pass mode: skip merge
+                        logger(f"   ⚠ Auto-skip: not merging due to ambiguity")
+                        tgt_img = out_dir / img_path.name
+                        tgt_vid = out_dir / vid_path.name
+                        if tgt_img.exists(): tgt_img = out_dir / f"{img_path.stem}_{int(time.time())}{img_path.suffix}"
+                        if tgt_vid.exists(): tgt_vid = out_dir / f"{vid_path.stem}_{int(time.time())}{vid_path.suffix}"
+                        try:
+                            shutil.copy2(img_path, tgt_img)
+                            shutil.copy2(vid_path, tgt_vid)
+                            logger(f"   ✓ Files copied unchanged to output.")
+                        except Exception as e:
+                            logger(f"   Copy failed: {e}")
+                        return
+                    else:
+                        # Manual verification mode: ask user
+                        if app is not None:
+                            app.misidentified.append((img_path, vid_path))
+                            logger(f"   ✓ Registered for manual verification (will prompt at end)")
+                        else:
+                            logger("   Manual verification requested but app context missing — skipping pair")
+                        return
+
+                else:
+                    # Confident match (>= 70%): proceed normally
+                    logger(f"   AI-2 match confidence: {confidence:.1%}")
+                    logger(f"   ✓ CONFIDENT MATCH (≥70%): {img_path.name} + {vid_path.name} - proceeding with processing.")
+            except Exception as e:
+                logger(f"   Verifier check failed: {e} — continuing")
         # ========== STAGE 1: Convert, Merge, Metadata ==========
         
         # 1. Convert Image
@@ -592,6 +791,9 @@ class Apples2DroidsApp:
         self.use_mov = tk.BooleanVar(value=True)
         self.use_jpg = tk.BooleanVar(value=False)
         self.use_mp4 = tk.BooleanVar(value=False)
+        self.use_ai2 = tk.BooleanVar(value=False)
+        self.ai2_auto_pass = tk.BooleanVar(value=True)
+        self.misidentified = []
 
         ttk.Checkbutton(fmt, text=".heic (Standard)", variable=self.use_heic).grid(row=0, column=0, sticky="w")
         ttk.Checkbutton(fmt, text=".mov (Standard)", variable=self.use_mov).grid(row=0, column=1, sticky="w")
@@ -601,6 +803,31 @@ class Apples2DroidsApp:
 
         ttk.Checkbutton(fmt, text=".jpg (Legacy)", variable=self.use_jpg).grid(row=2, column=0, sticky="w")
         ttk.Checkbutton(fmt, text=".mp4 (Legacy)", variable=self.use_mp4).grid(row=2, column=1, sticky="w")
+
+        ai_frame = ttk.LabelFrame(root, text="AI Options", padding=10)
+        ai_frame.pack(fill="x", padx=10, pady=(0,5))
+        
+        # Use GRID for the checkbutton to match the frame's manager if we add more
+        ttk.Checkbutton(ai_frame, text="Use AI Algorithm 2 (verify image+video match)", variable=self.use_ai2, command=self._on_ai2_toggle).grid(row=0, column=0, sticky="w")
+
+        self._ai2_modes_frame = ttk.Frame(ai_frame)
+        ttk.Radiobutton(
+            self._ai2_modes_frame,
+            text="Pass all flagged pairs unchanged (all pairs <70% confidence)",
+            value=True,
+            variable=self.ai2_auto_pass
+        ).pack(anchor="w")
+
+        ttk.Radiobutton(
+            self._ai2_modes_frame,
+            text="Individually verify ambiguous flagged pairs at end (pairs between 40-70% confidence)",
+            value=False,
+            variable=self.ai2_auto_pass
+        ).pack(anchor="w")
+        
+        # FIXED: Use grid() instead of pack() to avoid TclError with parent frame geometry manager
+        self._ai2_modes_frame.grid(row=1, column=0, sticky="w", pady=(6,0))
+        self._ai2_modes_frame.grid_remove() # Hidden by default
 
         self.btn_start = ttk.Button(root, text="START PROCESSING", state="disabled", command=self.start_thread)
         self.btn_start.pack(pady=10)
@@ -612,6 +839,228 @@ class Apples2DroidsApp:
         self.progress.pack(fill="x", padx=10, pady=5)
 
         self.root.after(100, self.process_queue)
+
+    def _on_ai2_toggle(self):
+        if self.use_ai2.get():
+            # FIXED: Use grid() instead of pack()
+            self._ai2_modes_frame.grid()
+        else:
+            self._ai2_modes_frame.grid_remove()
+
+    def _extract_video_frames_for_preview(self, vid_path: Path, num_frames=5):
+        """Extract multiple frames from video for slideshow preview."""
+        frames = []
+        temp_files = []
+        
+        try:
+            # Get video duration
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", str(vid_path)],
+                capture_output=True, text=True, check=True
+            )
+            try:
+                duration = float(result.stdout.strip())
+            except ValueError:
+                duration = 2.0
+            
+            # Extract frames at evenly spaced intervals
+            for i in range(num_frames):
+                position = (i / (num_frames - 1)) * duration if num_frames > 1 else 0
+                
+                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                    tmp_path = tmp.name
+                    temp_files.append(tmp_path)
+                    
+                # Close file handle so ffmpeg can write to it
+                
+                subprocess.run([
+                    "ffmpeg", "-y", "-ss", f"{position}", "-i", str(vid_path),
+                    "-vframes", "1", "-q:v", "2", tmp_path
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+                
+                if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
+                    try:
+                        pil_img = Image.open(tmp_path)
+                        pil_img.thumbnail((350, 350), Image.Resampling.LANCZOS)
+                        frames.append(pil_img)
+                    except Exception:
+                        pass
+                
+        except Exception as e:
+            print(f"Frame extraction error: {e}")
+            return None, temp_files
+        
+        return frames, temp_files
+
+    def _present_verify_dialog(self, img_path: Path, vid_path: Path):
+        """Enhanced verification dialog with side-by-side preview and video frame slideshow."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Verify Live Photo Pair")
+        dialog.geometry("1000x750")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        result = {"combine": False}
+        temp_files = []
+        
+        # Title
+        ttk.Label(
+            dialog, 
+            text=f"Possible mismatch detected (40-70% confidence)",
+            font=("Helvetica", 12, "bold")
+        ).pack(pady=10)
+        
+        ttk.Label(
+            dialog,
+            text=f"Image: {img_path.name}\nVideo: {vid_path.name}",
+            font=("Helvetica", 10)
+        ).pack(pady=5)
+        
+        # Frame for side-by-side preview
+        preview_frame = ttk.Frame(dialog)
+        preview_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Left: Image preview
+        img_frame = ttk.LabelFrame(preview_frame, text="Static Image", padding=10)
+        img_frame.pack(side="left", fill="both", expand=True, padx=5)
+        
+        img_label = ttk.Label(img_frame)
+        img_label.pack()
+        
+        try:
+            # Load and resize image
+            pil_img = Image.open(img_path)
+            pil_img = ImageOps.exif_transpose(pil_img)
+            pil_img.thumbnail((450, 450), Image.Resampling.LANCZOS)
+            photo_img = ImageTk.PhotoImage(pil_img)
+            img_label.config(image=photo_img)
+            img_label.image = photo_img  # Keep reference
+        except Exception as e:
+            img_label.config(text=f"Cannot preview image:\n{e}")
+        
+        # Right: Video preview with slideshow
+        vid_frame = ttk.LabelFrame(preview_frame, text="Video Frames (auto-playing)", padding=10)
+        vid_frame.pack(side="right", fill="both", expand=True, padx=5)
+        
+        vid_label = ttk.Label(vid_frame, text="Loading preview...")
+        vid_label.pack()
+        
+        frame_index_label = ttk.Label(vid_frame, text="", font=("Helvetica", 8))
+        frame_index_label.pack()
+        
+        # Force GUI update to show "Loading"
+        dialog.update()
+        
+        # Extract frames
+        video_frames, temp_files = self._extract_video_frames_for_preview(vid_path, num_frames=5)
+        
+        slideshow_state = {"index": 0, "running": True, "photo_refs": []}
+
+        if video_frames:
+            # Convert PIL images to PhotoImage
+            for frame in video_frames:
+                photo = ImageTk.PhotoImage(frame)
+                slideshow_state["photo_refs"].append(photo)
+            
+            def update_slideshow():
+                if not slideshow_state["running"]:
+                    return
+                try:
+                    if not dialog.winfo_exists():
+                        slideshow_state["running"] = False
+                        return
+                    
+                    idx = slideshow_state["index"]
+                    photo = slideshow_state["photo_refs"][idx]
+                    vid_label.config(image=photo)
+                    vid_label.image = photo
+                    frame_index_label.config(text=f"Frame {idx + 1} of {len(video_frames)}")
+                    
+                    # Move to next frame
+                    slideshow_state["index"] = (idx + 1) % len(video_frames)
+                    
+                    # Schedule next update (800ms between frames)
+                    dialog.after(800, update_slideshow)
+                except Exception:
+                    slideshow_state["running"] = False
+            
+            # Start slideshow
+            update_slideshow()
+        else:
+            vid_label.config(text="Cannot preview video (ffmpeg failed or empty)")
+        
+        # Question
+        ttk.Label(
+            dialog,
+            text="Do these files belong together as a Live Photo?",
+            font=("Helvetica", 11, "bold")
+        ).pack(pady=15)
+        
+        # Buttons
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(pady=10)
+        
+        def on_yes():
+            result["combine"] = True
+            slideshow_state["running"] = False
+            dialog.destroy()
+        
+        def on_no():
+            result["combine"] = False
+            slideshow_state["running"] = False
+            dialog.destroy()
+        
+        def on_close():
+            slideshow_state["running"] = False
+            result["combine"] = False
+            dialog.destroy()
+        
+        dialog.protocol("WM_DELETE_WINDOW", on_close)
+        
+        ttk.Button(
+            btn_frame, 
+            text="✓ YES - Combine them", 
+            command=on_yes,
+            width=25
+        ).pack(side="left", padx=10)
+        
+        ttk.Button(
+            btn_frame, 
+            text="✗ NO - Keep separate", 
+            command=on_no,
+            width=25
+        ).pack(side="right", padx=10)
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+        
+        # Cleanup temp files
+        for temp_file in temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+            except:
+                pass
+        
+        return result["combine"]
+
+    def _ask_user_sync(self, pair):
+        # pair is (img_path, vid_path)
+        evt = threading.Event()
+        result_container = {}
+
+        def _dialog():
+            try:
+                res = self._present_verify_dialog(pair[0], pair[1])
+            except Exception:
+                res = False
+            result_container['res'] = res
+            evt.set()
+
+        self.root.after(10, _dialog)
+        evt.wait()
+        return bool(result_container.get('res', False))
 
     def browse_source(self):
         p = filedialog.askdirectory()
@@ -656,6 +1105,8 @@ class Apples2DroidsApp:
         dst_root = Path(self.dest_dir.get())
         
         load_model_tf(lambda m: self.msg_queue.put(m))
+        # Load verifier model for AI algorithm 2 (if present)
+        load_verifier_model(lambda m: self.msg_queue.put(m))
         self.msg_queue.put(f"Scanning {src_root}...")
         
         img_exts = set()
@@ -712,7 +1163,12 @@ class Apples2DroidsApp:
                     futures = []
                     for i, pair in enumerate(valid_pairs):
                         self.msg_queue.put(f"Queued Live Photo [{i+1}/{len(valid_pairs)}]: {pair['img'].stem}")
-                        futures.append(ex.submit(process_live_pair, pair["img"], pair["vid"], dst_root, lambda m: self.msg_queue.put(m)))
+                        futures.append(ex.submit(
+                            process_live_pair,
+                            pair["img"], pair["vid"], dst_root,
+                            lambda m: self.msg_queue.put(m),
+                            self.use_ai2.get(), self.ai2_auto_pass.get(), self
+                        ))
 
                     for fut in as_completed(futures):
                         fut.result()
@@ -724,10 +1180,38 @@ class Apples2DroidsApp:
                 for i, pair in enumerate(valid_pairs):
                     self.msg_queue.put(f"Sequential Live Photo [{i+1}/{len(valid_pairs)}]: {pair['img'].stem}")
                     try:
-                        process_live_pair(pair['img'], pair['vid'], dst_root, lambda m: self.msg_queue.put(m))
+                        process_live_pair(pair['img'], pair['vid'], dst_root, lambda m: self.msg_queue.put(m), self.use_ai2.get(), self.ai2_auto_pass.get(), self)
                     except Exception as e2:
                         self.msg_queue.put(f"Sequential worker error: {e2}")
 
+        # If manual verification mode was selected and there are flagged pairs,
+        # prompt the user one-by-one on the main thread.
+        # NOTE: WE DO NOT STOP THE INFERENCE WORKER YET. WE NEED IT FOR THE MANUAL APPROVED PAIRS.
+        if self.use_ai2.get() and not self.ai2_auto_pass.get() and len(self.misidentified) > 0:
+            self.msg_queue.put(f"{len(self.misidentified)} flagged pairs require manual verification...")
+            for pair in list(self.misidentified):
+                try:
+                    combine = self._ask_user_sync(pair)
+                    if combine:
+                        self.msg_queue.put(f"User chose to combine: {pair[0].stem}")
+                        # process normally but with ai2 disabled to avoid re-flagging
+                        # IMPORTANT: This will use the running inference_worker for stage 2 (orientation fix)
+                        try:
+                            process_live_pair(pair[0], pair[1], dst_root, lambda m: self.msg_queue.put(m), False, True, self)
+                        except Exception as e:
+                            self.msg_queue.put(f"Error processing user-approved pair: {e}")
+                    else:
+                        # copy originals unchanged
+                        timg = dst_root / pair[0].name
+                        tv = dst_root / pair[1].name
+                        if timg.exists(): timg = dst_root / f"{pair[0].stem}_{int(time.time())}{pair[0].suffix}"
+                        if tv.exists(): tv = dst_root / f"{pair[1].stem}_{int(time.time())}{pair[1].suffix}"
+                        copy_unchanged(pair[0], timg, lambda m: self.msg_queue.put(m))
+                        copy_unchanged(pair[1], tv, lambda m: self.msg_queue.put(m))
+                except Exception as e:
+                    self.msg_queue.put(f"Manual verify error: {e}")
+        
+        # NOW we can safely stop the worker
         try:
             if inference_worker is not None:
                 inference_worker.stop()

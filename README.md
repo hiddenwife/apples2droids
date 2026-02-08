@@ -63,7 +63,7 @@ The code launches a lightweight front-end `tkinter` GUI to choose the input and 
 **NOTE**: Make sure your output folder is empty, as it will overwrite files of the same name.
 
 **NOTE**: The input folder is treated as read-only, so your original files are not intentionally modified.  
-However, **always keep a backup**. In the extremely unlikely event of a system crash during processing, file corruption is still possible.
+However, **always keep a backup**. If there's a system crash during processing, file corruption is still possible.
 
 ### Metadata and other images
 
@@ -82,7 +82,7 @@ Apple Live Photos rely heavily on EXIF orientation metadata rather than storing 
 - Some tools (including ExifTool) may:
   - apply EXIF orientation to the pixel data
   - then copy the same orientation metadata again
-  - resulting in **double-rotation** (commonly a 180° flip)
+  - resulting in **double-rotation** (180° flip)
 - Portrait images are especially affected, while landscape images often appear “correct” by coincidence
 
 As a result, metadata-based orientation handling becomes unreliable once files are converted into Motion Photos.
@@ -114,13 +114,32 @@ Training scripts are provided if you wish to retrain the model on your own photo
 
 This machine learning algorithm scans both the image and the video which are identified as a Live Photo combo, and confirms if the matching is correct. This is primarily for those who believe their file names are inaccurate. For example, unrelated images + videos having the same name.
 
-This can be toggled on/off. By default, this is toggled off.
+#### Info
 
-If you don't believe you have file naming issues, it's recommened to keep this toggled off to speed up the process. 
+- This can be toggled on/off. By default, this is toggled off.
+- Keep this toggled on if you do not want any accidental merges of random files, and are concerned this could happen.
+ - All my personal photos were from standard ICloud export, but this AI detected file naming issues with my photos.
+ - Therefore, there is no harm keeping this on even in standard photo downloading cases (the photo naming problems could have arised through using multiple device, or other ways).
 
-Keep this toggled on if you do not want any accidental merges of random files. 
+#### Training Process
 
-This is unnecessary for standard iCloud exports and will significantly slow down processing.
+- This algorithm has been trained on 10000 real Live Photos.
+ - The video-half of the Live Photo was split into ~7 screenshots, which was then compared against the image-half of the Live Photo.
+- The AI makes a judgement given the analysis of the 7 photos as to if it was correctly identified as a Live Photo duo.
+
+#### Inference process
+
+- If this option is toggled on, the AI scans the static image and 3-5 screenshots of the video. 
+ - A percentage judgement of each photo is made, with a final overall judgement.
+ - The specific setup is to reduce false-positives as much as possible
+- If the AI confirms they're the same, the photos are authorised to be combined and the code will continue to the next Live Photo
+- If the AI flags potential mis-identification, the user has two options depending on what they selected in the GUI:
+ - Pass all potential mis-identifications (<70%) to the output folder unchanged automatically, i.e. keep the original video and image.
+ - Individually verify each potential mis-identification (40%-70%), and confirm if they should be combined or not (this is done at the end). A embedded viewer pops up with the opportunity to compare the image and video side-by-side.
+- **NOTE**: With this enabled, all duos identified with <40% confidence are automatically passed unchanged, as there is a very high likelihood these duos were not originally Live Photos.
+
+
+**NOTE** False-positives are most likely to occur from near-identical photos which were taken at the same time/location. It may also be ambigious for a human to confirm. 
 
 
 ## Apple Format Help
@@ -142,8 +161,9 @@ This is unnecessary for standard iCloud exports and will significantly slow down
 - If the GUI stalls during processing, check system memory and CPU usage (`htop`, `free -m`).  
   You may need to close other applications or reduce concurrency via `PER_WORKER_MEM_MB`.
 - If AI inference is not running, ensure at least one model file exists:
-  `relative_rotation_alignment_model.keras` (TensorFlow) or
-  `relative_rotation_alignment_model_pt.pth` (PyTorch).
+ - `ML_algorithm_1/relative_rotation_alignment_model.keras` (TensorFlow) (100% necessary for correctness)
+ - `ML_algorithm_2/live_photo_verifier_model.keras` (TensorFlow) (necessary for verifying image+video)
+
 
 
 ### Low-memory systems
