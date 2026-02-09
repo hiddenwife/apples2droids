@@ -114,8 +114,6 @@ Instead of trusting metadata, apples2droids uses a **pixel-based approach**:
 
 The model has been trained on thousands of real photos.
 
-An equivalent **PyTorch** implementation is included as a fallback in case TensorFlow is unavailable.
-
 Training scripts are provided if you wish to retrain the model on your own photo library. A preprocessing script is also included to downscale images for efficient training.
 
 
@@ -128,7 +126,7 @@ This machine learning algorithm scans both the image and the video which are ide
 
 - This can be toggled on/off. By default, this is toggled off.
 - Keep this toggled on if you do not want any accidental merges of random files, and are concerned this could happen.
-  - All my personal photos were from standard ICloud export, but this AI detected file naming issues with my photos.
+  - All my personal photos were from standard ICloud export, but this AI detected file naming issues with my photos (which were correct and I hadn't realised, and saved them from being combined).
   - Therefore, there is no harm keeping this on even in standard photo downloading cases (the photo naming problems could have arised through using multiple device, or other ways).
 
 #### Training Process
@@ -145,13 +143,16 @@ This machine learning algorithm scans both the image and the video which are ide
 - If the AI confirms they're the same, the photos are authorised to be combined and the code will continue to the next Live Photo
 - If the AI flags potential mis-identification, the user has two options depending on what they selected in the GUI:
   - Pass all potential mis-identifications (<70%) to the output folder unchanged automatically, i.e. keep the original video and image.
-  - **Recommended**: Individually verify each potential mis-identification (40%-70%), and confirm if they should be combined or not (this is done at the end). A embedded viewer pops up with the opportunity to compare the image and video side-by-side.
+  - **Recommended**: Individually verify each potential mis-identification (40%-70%), and confirm if they should be combined or not (this is done at the end). An embedded viewer pops up with the opportunity to compare the image and video side-by-side.
     - Most of these are actually duos, as most non-duos are filtered out at <40% confidence.
     - In practice, photos with >60% confidence are likely Live Photo pairs. 
 - **NOTE**: With this enabled, all duos identified with <40% confidence are automatically passed unchanged, as there is a very high likelihood these duos were not originally Live Photos.
 
 
 **NOTE** False-positives are unlikely to occur, unless the photos+videos are very very blurry, have no colour, or actually look the exact same. AND they need to happen to have the same name by chance. 
+
+
+Training scripts are provided if you wish to retrain the model on your own photo library. A preprocessing script is also included to downscale images for efficient training.
 
 
 ## Apple Format Help
@@ -172,7 +173,7 @@ This machine learning algorithm scans both the image and the video which are ide
 
 - If the GUI stalls during processing, check system memory and CPU usage (`htop`, `free -m`).  
   You may need to close other applications or reduce concurrency via `PER_WORKER_MEM_MB`.
-- If AI inference is not running, ensure at least one model file exists:
+- If AI inference is not running, files exist:
   - `ML_algorithm_1/relative_rotation_alignment_model.keras` (TensorFlow) (100% necessary for correctness)
   - `ML_algorithm_2/live_photo_verifier_model.keras` (TensorFlow) (necessary for verifying image+video)
 
