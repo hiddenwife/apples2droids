@@ -16,7 +16,7 @@ The resulting `.jpg` remains a Motion Photo, but its motion component is only ac
 ## Contents
 - [Quick Start](#quick-start)
 - [Overview and Usage](#overview-and-Usage)
-- [AI algorithm 1)](#ai-algorithm-1)
+- [AI algorithm 1](#ai-algorithm-1)
 - [AI algorithm 2](#ai-algorithm-2)
 - [Apple Format Help](#apple-format-help)
 - [Troubleshooting](#troubleshooting)
