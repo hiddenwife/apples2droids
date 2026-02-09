@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 ROBUST TWO-STAGE APPROACH:
-1. Let exiftool do its thing completely (copy all metadata including orientation)
+1. Let exiftool do its thing completely
 2. Save the file atomically 
-3. THEN use AI to check if the saved file matches the original
-4. If not, fix orientation via pixels
+4. Use AI-2 to verify the image+video pair if selected
+4. Use AI-1 to check if the saved file matches the original (orientation)
 
-This respects exiftool's workflow and doesn't try to fight it mid-process.
+All new Motion Photos are saved to output, along with all unchanged files.
 """
 
 from ML_algorithm_2.custom_layers import AbsDiff, ReduceMin, ReduceMean
@@ -825,9 +825,8 @@ class Apples2DroidsApp:
             variable=self.ai2_auto_pass
         ).pack(anchor="w")
         
-        # FIXED: Use grid() instead of pack() to avoid TclError with parent frame geometry manager
         self._ai2_modes_frame.grid(row=1, column=0, sticky="w", pady=(6,0))
-        self._ai2_modes_frame.grid_remove() # Hidden by default
+        self._ai2_modes_frame.grid_remove()
 
         self.btn_start = ttk.Button(root, text="START PROCESSING", state="disabled", command=self.start_thread)
         self.btn_start.pack(pady=10)
