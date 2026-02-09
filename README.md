@@ -1,6 +1,15 @@
 ![logo](docs/logo.jpeg "logo")
 
 
+## Contents
+- [About](#about)
+- [Quick Start](#quick-start)
+- [Overview and Usage](#overview-and-Usage)
+- [AI algorithm 1](#ai-algorithm-1)
+- [AI algorithm 2](#ai-algorithm-2)
+- [Apple Format Help](#apple-format-help)
+- [Troubleshooting](#troubleshooting)
+
 ## About
 
 If you're migrating away from Apple and want to keep your Live Photos *alive*, this repo is for you.
@@ -13,13 +22,6 @@ The resulting `.jpg` remains a Motion Photo, but its motion component is only ac
 
 **NOTE**: This tool assumes Live Photos are exported as one image file and one video file with identical names (e.g. `IMG_0001.HEIC` + `IMG_0001.MOV`), which is the standard iCloud export format. If filenames do not match, they will not be paired.
 
-## Contents
-- [Quick Start](#quick-start)
-- [Overview and Usage](#overview-and-Usage)
-- [AI algorithm 1](#ai-algorithm-1)
-- [AI algorithm 2](#ai-algorithm-2)
-- [Apple Format Help](#apple-format-help)
-- [Troubleshooting](#troubleshooting)
 
 
 ## Quick Start
