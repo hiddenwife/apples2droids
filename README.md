@@ -16,7 +16,7 @@ The resulting `.jpg` remains a Motion Photo, but its motion component is only ac
 ## Contents
 - [Quick Start](#quick-start)
 - [Overview and Usage](#overview-and-Usage)
-- [AI algorithm 1)](#ai-algorithm-1-–-orientation-correction-(pixel-based))
+- [AI algorithm 1)](#ai-algorithm-1)
 - [AI algorithm 2](#ai-algorithm-2)
 - [Apple Format Help](#apple-format-help)
 - [Troubleshooting](#troubleshooting)
@@ -79,7 +79,7 @@ The metadata of the new Motion Photos are copied directly from their respective 
 
 All other non-Live images and videos are left unchanged with their original metadata preserved, and are added to the output folder.
 
-## AI algorithm 1 – Orientation correction (Pixel-based)
+## AI algorithm 1
 
 apples2droids uses a **TensorFlow-powered machine learning model** to correct image orientation. This is necessary because relying on metadata alone was found to be inconsistent and unreliable.
 
