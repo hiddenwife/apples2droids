@@ -13,6 +13,14 @@ The resulting `.jpg` remains a Motion Photo, but its motion component is only ac
 
 **NOTE**: This tool assumes Live Photos are exported as one image file and one video file with identical names (e.g. `IMG_0001.HEIC` + `IMG_0001.MOV`), which is the standard iCloud export format. If filenames do not match, they will not be paired.
 
+## Contents
+- [Quick Start](#quick-start)
+- [Overview and Usage](#overview-and-Usage)
+- [AI algorithm 1)](#ai-algorithm-1-–-orientation-correction-(pixel-based))
+- [AI algorithm 2](#ai-algorithm-2)
+- [Apple Format Help](#apple-format-help)
+- [Troubleshooting](#troubleshooting)
+
 
 ## Quick Start
 You need Python. Create a virtual environment, then run:
@@ -137,7 +145,7 @@ This machine learning algorithm scans both the image and the video which are ide
   - Pass all potential mis-identifications (<70%) to the output folder unchanged automatically, i.e. keep the original video and image.
   - **Recommended**: Individually verify each potential mis-identification (40%-70%), and confirm if they should be combined or not (this is done at the end). A embedded viewer pops up with the opportunity to compare the image and video side-by-side.
     - Most of these are actually duos, as most non-duos are filtered out at <40% confidence.
-    - In practice, photos with >60% confidence likely duos. 
+    - In practice, photos with >60% confidence are likely Live Photo pairs. 
 - **NOTE**: With this enabled, all duos identified with <40% confidence are automatically passed unchanged, as there is a very high likelihood these duos were not originally Live Photos.
 
 
