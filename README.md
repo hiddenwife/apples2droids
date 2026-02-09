@@ -55,7 +55,7 @@ chmod +x apples2droids.py
 ```
 
 
-## Overview and Usage
+# Overview and Usage
 
 ### GUI
 The code launches a lightweight front-end `tkinter` GUI to choose the input and output folders, and to execute the code.
@@ -71,7 +71,7 @@ The metadata of the new Motion Photos are copied directly from their respective 
 
 All other non-Live images and videos are left unchanged with their original metadata preserved, and are added to the output folder.
 
-### AI algorithm 1 – Orientation correction (Pixel-based)
+## AI algorithm 1 – Orientation correction (Pixel-based)
 
 apples2droids uses a **TensorFlow-powered machine learning model** to correct image orientation. This is necessary because relying on metadata alone was found to be inconsistent and unreliable.
 
@@ -110,7 +110,7 @@ Training scripts are provided if you wish to retrain the model on your own photo
 
 
 
-### AI algorithm 2
+## AI algorithm 2
 
 This machine learning algorithm scans both the image and the video which are identified as a Live Photo combo, and confirms if the matching is correct. This is primarily for those who believe their file names are inaccurate. For example, unrelated images + videos having the same name.
 
@@ -135,11 +135,13 @@ This machine learning algorithm scans both the image and the video which are ide
 - If the AI confirms they're the same, the photos are authorised to be combined and the code will continue to the next Live Photo
 - If the AI flags potential mis-identification, the user has two options depending on what they selected in the GUI:
   - Pass all potential mis-identifications (<70%) to the output folder unchanged automatically, i.e. keep the original video and image.
-  - Individually verify each potential mis-identification (40%-70%), and confirm if they should be combined or not (this is done at the end). A embedded viewer pops up with the opportunity to compare the image and video side-by-side.
+  - **Recommended**: Individually verify each potential mis-identification (40%-70%), and confirm if they should be combined or not (this is done at the end). A embedded viewer pops up with the opportunity to compare the image and video side-by-side.
+    - Most of these are actually duos, as most non-duos are filtered out at <40% confidence.
+    - In practice, photos with >60% confidence likely duos. 
 - **NOTE**: With this enabled, all duos identified with <40% confidence are automatically passed unchanged, as there is a very high likelihood these duos were not originally Live Photos.
 
 
-**NOTE** False-positives are most likely to occur from near-identical photos which were taken at the same time/location. It may also be ambigious for a human to confirm. 
+**NOTE** False-positives are unlikely to occur, unless the photos+videos are very very blurry, have no colour, or actually look the exact same. AND they need to happen to have the same name by chance. 
 
 
 ## Apple Format Help
